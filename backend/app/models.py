@@ -348,6 +348,46 @@ class HelpRequest(TimestampMixin, Base):
     order: Mapped["Order | None"] = relationship()
 
 
+class ChatbotBranding(TimestampMixin, Base):
+    __tablename__ = "chatbot_branding"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_name: Mapped[str] = mapped_column(String(120), default="JioBasket", nullable=False)
+    logo_url: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+
+class FaqTopic(TimestampMixin, Base):
+    __tablename__ = "faq_topics"
+    __table_args__ = (
+        UniqueConstraint("title", name="uq_faq_topics_title"),
+        Index("ix_faq_topics_active_sort", "is_active", "sort_order"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    questions: Mapped[list["FaqQuestion"]] = relationship(back_populates="topic", cascade="all, delete-orphan")
+
+
+class FaqQuestion(TimestampMixin, Base):
+    __tablename__ = "faq_questions"
+    __table_args__ = (
+        Index("ix_faq_questions_topic_sort", "topic_id", "sort_order"),
+        Index("ix_faq_questions_active", "is_active"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    topic_id: Mapped[int] = mapped_column(ForeignKey("faq_topics.id", ondelete="CASCADE"), index=True, nullable=False)
+    question: Mapped[str] = mapped_column(String(255), nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    topic: Mapped[FaqTopic] = relationship(back_populates="questions")
+
+
 class DeliverySlot(TimestampMixin, Base):
     __tablename__ = "delivery_slots"
     __table_args__ = (Index("ix_delivery_slots_active_day", "is_active", "day_label"),)

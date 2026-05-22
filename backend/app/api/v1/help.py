@@ -9,6 +9,7 @@ from app.api.responses import api_response
 from app.core.database import get_db
 from app.models import HelpRequest, Order, User
 from app.schemas import HelpRequestCreate
+from app.services.help_content import help_content_data
 
 router = APIRouter()
 
@@ -30,6 +31,11 @@ def help_request_data(request: HelpRequest) -> dict:
         "responded_at": request.responded_at,
         "created_at": request.created_at,
     }
+
+
+@router.get("/content")
+def help_content(db: Session = Depends(get_db)):
+    return api_response(help_content_data(db))
 
 
 @router.get("")

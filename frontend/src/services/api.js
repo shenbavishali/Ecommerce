@@ -201,6 +201,11 @@ export async function fetchHelpRequests() {
   return unwrap(response);
 }
 
+export async function fetchHelpContent() {
+  const response = await api.get('/api/v1/help/content');
+  return unwrap(response);
+}
+
 export async function createHelpRequest(payload) {
   const response = await api.post('/api/v1/help', payload);
   return unwrap(response);
@@ -351,6 +356,55 @@ export async function fetchAdminHelpRequests() {
 
 export async function respondAdminHelpRequest(requestId, payload) {
   const response = await api.patch(`/api/v1/admin/help-requests/${requestId}`, payload);
+  return unwrap(response);
+}
+
+export async function fetchAdminHelpContent() {
+  const response = await api.get('/api/v1/admin/help-content');
+  return unwrap(response);
+}
+
+export async function updateAdminHelpBranding(payload) {
+  const response = await api.patch('/api/v1/admin/help-content/branding', payload);
+  return unwrap(response);
+}
+
+export async function uploadAdminHelpLogo(file) {
+  const formData = new FormData();
+  formData.append('logo', file);
+  const response = await api.post('/api/v1/admin/help-content/branding/logo', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return unwrap(response);
+}
+
+export async function createAdminFaqTopic(payload) {
+  const response = await api.post('/api/v1/admin/faq-topics', payload);
+  return unwrap(response);
+}
+
+export async function updateAdminFaqTopic(topicId, payload) {
+  const response = await api.patch(`/api/v1/admin/faq-topics/${topicId}`, payload);
+  return unwrap(response);
+}
+
+export async function deleteAdminFaqTopic(topicId) {
+  const response = await api.delete(`/api/v1/admin/faq-topics/${topicId}`);
+  return unwrap(response);
+}
+
+export async function createAdminFaqQuestion(payload) {
+  const response = await api.post('/api/v1/admin/faq-questions', payload);
+  return unwrap(response);
+}
+
+export async function updateAdminFaqQuestion(questionId, payload) {
+  const response = await api.patch(`/api/v1/admin/faq-questions/${questionId}`, payload);
+  return unwrap(response);
+}
+
+export async function deleteAdminFaqQuestion(questionId) {
+  const response = await api.delete(`/api/v1/admin/faq-questions/${questionId}`);
   return unwrap(response);
 }
 

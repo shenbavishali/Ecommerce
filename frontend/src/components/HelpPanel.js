@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Headphones, MessageCircle, PackageSearch, Phone, Send, ShieldQuestion } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useOrderStore } from '../store/orderStore';
-import { createHelpRequest, fetchHelpRequests } from '../services/api';
+import { createHelpRequest, fetchHelpContent, fetchHelpRequests } from '../services/api';
 import { helpFaqTopics } from '../utils/helpFaqs';
 
 const issueOptions = {
@@ -37,10 +37,29 @@ export default function HelpPanel({ initialOrder = null }) {
   const [createdTicket, setCreatedTicket] = useState(null);
   const [selectedFaqTopicId, setSelectedFaqTopicId] = useState('gift-card');
   const [selectedFaqQuestionId, setSelectedFaqQuestionId] = useState('gift-card-use');
+  const [helpContent, setHelpContent] = useState({ branding: { company_name: 'JioBasket', logo_url: '' }, topics: helpFaqTopics });
 
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchHelpContent()
+      .then((content) => {
+        if (isMounted && content) {
+          setHelpContent(content);
+          if (content.topics?.length) {
+            setSelectedFaqTopicId(String(content.topics[0].id));
+            setSelectedFaqQuestionId(String(content.topics[0].questions?.[0]?.id || ''));
+          }
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -86,10 +105,11 @@ export default function HelpPanel({ initialOrder = null }) {
     [initialOrder, orders, selectedOrderId]
   );
   const issueTopics = useMemo(() => topicsForStatus(selectedOrder?.status || 'placed'), [selectedOrder?.status]);
-  const selectedFaqTopic = helpFaqTopics.find((topic) => topic.id === selectedFaqTopicId) || helpFaqTopics[0];
+  const faqTopics = Array.isArray(helpContent.topics) ? helpContent.topics : helpFaqTopics;
+  const selectedFaqTopic = faqTopics.find((topic) => String(topic.id) === String(selectedFaqTopicId)) || faqTopics[0];
   const selectedFaqQuestion =
-    selectedFaqTopic.questions.find((question) => question.id === selectedFaqQuestionId) ||
-    selectedFaqTopic.questions[0];
+    selectedFaqTopic?.questions?.find((question) => String(question.id) === String(selectedFaqQuestionId)) ||
+    selectedFaqTopic?.questions?.[0];
 
   useEffect(() => {
     setIssueType(issueTopics[0] || '');
@@ -120,8 +140,11 @@ export default function HelpPanel({ initialOrder = null }) {
               Step 1: Select Topic
             </h2>
             <div className="max-h-80 overflow-y-auto lg:max-h-[430px]">
-              {helpFaqTopics.map((topic) => {
-                const isSelected = topic.id === selectedFaqTopic.id;
+              {faqTopics.length === 0 && (
+                <p className="p-4 text-sm font-semibold text-slate-500">No FAQ topics are active.</p>
+              )}
+              {faqTopics.map((topic) => {
+                const isSelected = String(topic.id) === String(selectedFaqTopic.id);
                 return (
                   <button
                     className={`flex min-h-11 w-full items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-50 ${
@@ -129,8 +152,8 @@ export default function HelpPanel({ initialOrder = null }) {
                     }`}
                     key={topic.id}
                     onClick={() => {
-                      setSelectedFaqTopicId(topic.id);
-                      setSelectedFaqQuestionId(topic.questions[0]?.id);
+                      setSelectedFaqTopicId(String(topic.id));
+                      setSelectedFaqQuestionId(String(topic.questions[0]?.id || ''));
                     }}
                     type="button"
                   >
@@ -147,15 +170,18 @@ export default function HelpPanel({ initialOrder = null }) {
               Step 2: Select Issue
             </h2>
             <div className="max-h-80 overflow-y-auto lg:max-h-[430px]">
-              {selectedFaqTopic.questions.map((item) => {
-                const isSelected = item.id === selectedFaqQuestion.id;
+              {!selectedFaqTopic && (
+                <p className="p-4 text-sm font-semibold text-slate-500">Select or add an active topic first.</p>
+              )}
+              {selectedFaqTopic?.questions?.map((item) => {
+                const isSelected = String(item.id) === String(selectedFaqQuestion.id);
                 return (
                   <button
                     className={`flex min-h-11 w-full items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-left text-sm font-semibold leading-5 text-slate-800 hover:bg-slate-50 ${
                       isSelected ? 'bg-slate-100 font-black' : 'bg-white'
                     }`}
                     key={item.id}
-                    onClick={() => setSelectedFaqQuestionId(item.id)}
+                    onClick={() => setSelectedFaqQuestionId(String(item.id))}
                     type="button"
                   >
                     <span>{item.question}</span>
@@ -172,13 +198,13 @@ export default function HelpPanel({ initialOrder = null }) {
             </h2>
             <div className="min-h-64 p-5 lg:min-h-[430px]">
               <p className="text-xs font-black uppercase tracking-wide text-emerald-700">
-                {selectedFaqTopic.title}
+                {selectedFaqTopic?.title || 'Help & Care'}
               </p>
               <h3 className="mt-2 text-base font-black leading-6 text-slate-950">
-                {selectedFaqQuestion.question}
+                {selectedFaqQuestion?.question || 'No FAQ selected'}
               </h3>
               <p className="mt-4 text-sm font-semibold leading-7 text-slate-700">
-                {selectedFaqQuestion.answer}
+                {selectedFaqQuestion?.answer || 'Add active FAQ topics and questions from the Admin Panel to show assistance here.'}
               </p>
             </div>
           </div>

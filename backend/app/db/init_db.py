@@ -4,7 +4,95 @@ from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.core.database import Base, SessionLocal, engine
-from app.models import Coupon, DeliveryBoy, DeliveryHub, DeliverySlot, Product, ProductHubStock, SeasonalOfferBanner, SummerSaleOffer
+from app.models import (
+    ChatbotBranding,
+    Coupon,
+    DeliveryBoy,
+    DeliveryHub,
+    DeliverySlot,
+    FaqQuestion,
+    FaqTopic,
+    Product,
+    ProductHubStock,
+    SeasonalOfferBanner,
+    SummerSaleOffer,
+)
+
+
+DEFAULT_FAQS = [
+    (
+        "Loyalty Rewards",
+        [
+            ("How do I earn loyalty rewards?", "You earn reward points on eligible orders after they are delivered. Points may vary by product, offer, and order value."),
+            ("How can I redeem my reward points?", "Open Loyalty Rewards from your account, check your available balance, and apply eligible points during checkout."),
+            ("Do loyalty points expire?", "Reward points can expire based on campaign rules. Check the expiry details in the Loyalty Rewards section before checkout."),
+        ],
+    ),
+    (
+        "Shipping FAQs",
+        [
+            ("When will my order be delivered?", "Delivery time depends on your pincode, product availability, and selected delivery slot. You can see the estimate on the product page and checkout."),
+            ("Can I change my delivery address after placing an order?", "Address changes are usually allowed only before the order is packed. Open Orders or Help & Support to request a change."),
+            ("Why am I seeing a delivery charge?", "Delivery charges may apply based on order value, delivery slot, location, or offer eligibility. The final fee is shown before payment."),
+        ],
+    ),
+    (
+        "Account & Shopping",
+        [
+            ("How do I create an account?", "Tap Login, choose signup, enter your details, and complete email verification if prompted."),
+            ("How do I search for products?", "Use the search bar or ask the assistant for a product name or brand, such as Amul or Paneer. Matching products will appear from the catalog."),
+            ("How do I add products to cart?", "Open a product and choose Add to Cart. You can update quantity, remove items, and proceed to checkout from Cart."),
+        ],
+    ),
+    (
+        "JioBasket Wallet",
+        [
+            ("How can I use wallet balance?", "Wallet balance can be applied during checkout when it is available for your account and order type."),
+            ("Where will my wallet refund appear?", "Eligible refunds are credited to your wallet or original payment method based on the order payment mode and refund rules."),
+        ],
+    ),
+    (
+        "Gift Card",
+        [
+            ("How do I use a gift card?", "Enter the gift card code during checkout if gift cards are enabled for your order. The eligible amount is deducted from the total."),
+            ("How can I check gift card balance?", "Open Gift Card in your account or contact support with the gift card code details."),
+        ],
+    ),
+    (
+        "Cancellation FAQs",
+        [
+            ("How do I cancel an order?", "Open Orders, select the order, choose Cancel Order, pick a reason, and submit. Cancellation is usually available before packing or shipping."),
+            ("When will I get a refund for a cancelled order?", "Refund timelines depend on the payment method. The expected refund status is shown on the cancelled order."),
+        ],
+    ),
+    (
+        "Returns FAQs",
+        [
+            ("How do I return an item?", "Open Orders, select a delivered order, choose Return for the eligible item, add the reason, and submit the request."),
+            ("Why is my product not eligible for return?", "Some products may be non-returnable, outside the return window, or already used beyond policy limits. Check the product policy on the order."),
+            ("How can I track return pickup?", "Return pickup status appears inside Orders. If the pickup is delayed, raise a Help & Support request from the order."),
+        ],
+    ),
+    (
+        "Payment FAQs",
+        [
+            ("What does opting for Cash on Delivery mean?", "Cash on Delivery lets you pay when the order reaches you. Availability depends on your pincode, cart value, and product eligibility."),
+            ("What if the amount got debited but I did not receive an Order ID?", "If payment is debited and no order is created, wait a few minutes and check Orders. If it still does not appear, contact support with your payment reference."),
+            ("Will I have to pay hidden costs like sales tax or other charges?", "No hidden charges are collected after checkout. Product price, delivery fee, discount, and applicable taxes are shown before you place the order."),
+            ("What are the various modes of payment?", "You can pay using credit card, debit card, net banking, UPI, wallets, wallet balance, or Cash on Delivery where available. Payment options may vary by pincode and order value."),
+            ("For Cash-on-Delivery orders, can I check the package before payment?", "You can check the package condition at delivery, but opening the product before payment may not be available for all orders."),
+            ("Can I pay using international currency?", "Orders are billed in Indian Rupees. International cards may work only if supported by the payment provider."),
+            ("What does convenience fee mean?", "A convenience fee is an additional charge applied for selected services, payment modes, or order types. It is shown before payment."),
+        ],
+    ),
+    (
+        "GST FAQs",
+        [
+            ("Can I get a GST invoice?", "GST invoice availability depends on seller and product eligibility. Invoice details are available after order placement."),
+            ("Can I add GST details after placing an order?", "GST details should be added before placing the order. Post-order changes may not be supported."),
+        ],
+    ),
+]
 
 
 def create_mysql_schema() -> None:
@@ -17,6 +105,7 @@ def create_mysql_schema() -> None:
     seed_seasonal_offer_banners()
     seed_summer_sale_offers()
     seed_coupons()
+    seed_chatbot_content()
 
 
 def ensure_schema_updates() -> None:
@@ -283,6 +372,37 @@ def seed_coupons() -> None:
                 Coupon(code="WEEKEND200", title="Weekend Cart", discount=200, min_order=2499, description="Save Rs.200 on weekend family shopping.", expires_at=expires_at),
             ]
         )
+        db.commit()
+    finally:
+        db.close()
+
+
+def seed_chatbot_content() -> None:
+    db: Session = SessionLocal()
+    try:
+        branding = db.scalar(select(ChatbotBranding).limit(1))
+        if branding is None:
+            db.add(ChatbotBranding(company_name="JioBasket", logo_url=""))
+
+        exists = db.scalar(select(FaqTopic.id).limit(1))
+        if exists:
+            db.commit()
+            return
+
+        for topic_index, (title, questions) in enumerate(DEFAULT_FAQS):
+            topic = FaqTopic(title=title, sort_order=topic_index, is_active=True)
+            db.add(topic)
+            db.flush()
+            for question_index, (question, answer) in enumerate(questions):
+                db.add(
+                    FaqQuestion(
+                        topic_id=topic.id,
+                        question=question,
+                        answer=answer,
+                        sort_order=question_index,
+                        is_active=True,
+                    )
+                )
         db.commit()
     finally:
         db.close()

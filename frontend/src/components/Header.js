@@ -4,7 +4,16 @@ import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { fetchAdminReturns } from '../services/api';
 
-export default function Header({ activeView, onNavigate, searchTerm, onSearchChange }) {
+function logoUrl(logo) {
+  if (!logo) {
+    return '';
+  }
+  return logo.startsWith('/static')
+    ? `${process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000'}${logo}`
+    : logo;
+}
+
+export default function Header({ activeView, branding = { company_name: 'JioBasket', logo_url: '' }, onNavigate, searchTerm, onSearchChange }) {
   const totalItems = useCartStore((state) => state.totalItems());
   const loadCart = useCartStore((state) => state.loadCart);
   const clearCart = useCartStore((state) => state.clearCart);
@@ -12,6 +21,8 @@ export default function Header({ activeView, onNavigate, searchTerm, onSearchCha
   const logout = useAuthStore((state) => state.logout);
   const [returnCount, setReturnCount] = useState(0);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const companyName = branding.company_name || 'JioBasket';
+  const resolvedLogoUrl = logoUrl(branding.logo_url);
 
   useEffect(() => {
     let isMounted = true;
@@ -104,10 +115,14 @@ export default function Header({ activeView, onNavigate, searchTerm, onSearchCha
           type="button"
         >
           <span className="grid h-10 w-10 place-items-center rounded-md bg-emerald-600 text-lg font-black text-white">
-            J
+            {resolvedLogoUrl ? (
+              <img alt={`${companyName} logo`} className="h-9 w-9 rounded object-cover" src={resolvedLogoUrl} />
+            ) : (
+              companyName.charAt(0).toUpperCase()
+            )}
           </span>
           <span>
-            <span className="block text-lg font-black leading-5 text-slate-950">JioBasket</span>
+            <span className="block text-lg font-black leading-5 text-slate-950">{companyName}</span>
             <span className="block text-xs font-medium text-slate-500">Fresh groceries fast</span>
           </span>
         </button>

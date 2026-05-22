@@ -364,6 +364,39 @@ class HelpRequestResponse(BaseModel):
     status: str = Field(default="answered", pattern="^(open|in_progress|answered|closed)$")
 
 
+class ChatbotBrandingUpdate(BaseModel):
+    company_name: str | None = Field(default=None, min_length=1, max_length=120)
+    logo_url: str | None = None
+
+
+class FaqTopicCreate(BaseModel):
+    title: str = Field(min_length=2, max_length=120)
+    sort_order: int = Field(default=0, ge=0)
+    is_active: bool = True
+
+
+class FaqTopicUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=120)
+    sort_order: int | None = Field(default=None, ge=0)
+    is_active: bool | None = None
+
+
+class FaqQuestionCreate(BaseModel):
+    topic_id: int
+    question: str = Field(min_length=2, max_length=255)
+    answer: str = Field(min_length=2, max_length=4000)
+    sort_order: int = Field(default=0, ge=0)
+    is_active: bool = True
+
+
+class FaqQuestionUpdate(BaseModel):
+    topic_id: int | None = None
+    question: str | None = Field(default=None, min_length=2, max_length=255)
+    answer: str | None = Field(default=None, min_length=2, max_length=4000)
+    sort_order: int | None = Field(default=None, ge=0)
+    is_active: bool | None = None
+
+
 class ReturnRequestCreate(BaseModel):
     order_id: int
     order_item_id: int

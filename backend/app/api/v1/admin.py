@@ -9,13 +9,18 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import get_current_admin
 from app.api.responses import api_response
 from app.core.database import get_db
-from app.models import DeliveryBoy, DeliveryHub, DeliverySlot, HelpRequest, Order, OrderItem, Product, ProductHubStock, ReturnRequest, User, utc_now
+from app.models import ChatbotBranding, DeliveryBoy, DeliveryHub, DeliverySlot, FaqQuestion, FaqTopic, HelpRequest, Order, OrderItem, Product, ProductHubStock, ReturnRequest, User, utc_now
 from app.schemas import (
+    ChatbotBrandingUpdate,
     DeliveryBoyCreate,
     DeliveryBoyUpdate,
     DeliveryHubCreate,
     DeliveryHubUpdate,
     DeliverySlotCreate,
+    FaqQuestionCreate,
+    FaqQuestionUpdate,
+    FaqTopicCreate,
+    FaqTopicUpdate,
     HelpRequestResponse,
     OrderDeliveryBoyUpdate,
     OrderCancellationUpdate,
@@ -27,6 +32,7 @@ from app.schemas import (
     ReturnAdminUpdate,
     StockAdjustment,
 )
+from app.services.help_content import branding_data, faq_question_data, faq_topic_data, help_content_data
 from app.services.products import apply_product_filters, count_products, unique_slug
 from app.services.tracking import order_item_data, tracking_data
 from app.services.email import send_warranty_card_email
@@ -35,6 +41,7 @@ from app.services.warranty import replacement_eligibility, warranty_card_data
 router = APIRouter()
 HUB_STATE = "Tamilnadu"
 PRODUCT_IMAGE_DIR = Path("static/products")
+BRANDING_IMAGE_DIR = Path("static/branding")
 ALLOWED_PRODUCT_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
@@ -357,6 +364,159 @@ def admin_respond_help_request(
     db.commit()
     db.refresh(request)
     return api_response(help_request_data(request), "Help response sent")
+
+
+@router.get("/help-content")
+def admin_help_content(_: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return api_response(help_content_data(db, include_inactive=True))
+
+
+@router.patch("/help-content/branding")
+def admin_update_help_branding(
+    payload: ChatbotBrandingUpdate,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    branding = db.scalar(select(ChatbotBranding).order_by(ChatbotBranding.id).limit(1))
+    if branding is None:
+        branding = ChatbotBranding()
+        db.add(branding)
+        db.flush()
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(branding, key, value or "")
+    db.commit()
+    db.refresh(branding)
+    return api_response(branding_data(branding), "Chatbot branding updated")
+
+
+@router.post("/help-content/branding/logo")
+async def admin_upload_help_logo(
+    logo: UploadFile = File(...),
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    suffix = Path(logo.filename or "").suffix.lower()
+    if suffix not in ALLOWED_PRODUCT_IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a JPG, PNG, or WEBP logo")
+
+    branding = db.scalar(select(ChatbotBranding).order_by(ChatbotBranding.id).limit(1))
+    if branding is None:
+        branding = ChatbotBranding()
+        db.add(branding)
+        db.flush()
+
+    BRANDING_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"logo-{uuid4().hex}{suffix}"
+    target = BRANDING_IMAGE_DIR / filename
+    target.write_bytes(await logo.read())
+    branding.logo_url = f"/static/branding/{filename}"
+    db.commit()
+    db.refresh(branding)
+    return api_response(branding_data(branding), "Chatbot logo uploaded")
+
+
+@router.post("/faq-topics", status_code=status.HTTP_201_CREATED)
+def admin_create_faq_topic(
+    payload: FaqTopicCreate,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    topic = FaqTopic(**payload.model_dump())
+    db.add(topic)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="FAQ topic already exists") from exc
+    db.refresh(topic)
+    return api_response(faq_topic_data(topic, include_inactive_questions=True), "FAQ topic created")
+
+
+@router.patch("/faq-topics/{topic_id}")
+def admin_update_faq_topic(
+    topic_id: int,
+    payload: FaqTopicUpdate,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    topic = db.scalar(select(FaqTopic).where(FaqTopic.id == topic_id).options(selectinload(FaqTopic.questions)))
+    if topic is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="FAQ topic not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(topic, key, value)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="FAQ topic already exists") from exc
+    db.refresh(topic)
+    return api_response(faq_topic_data(topic, include_inactive_questions=True), "FAQ topic updated")
+
+
+@router.delete("/faq-topics/{topic_id}")
+def admin_delete_faq_topic(
+    topic_id: int,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    topic = db.scalar(select(FaqTopic).where(FaqTopic.id == topic_id).options(selectinload(FaqTopic.questions)))
+    if topic is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="FAQ topic not found")
+    topic.is_active = False
+    for question in topic.questions:
+        question.is_active = False
+    db.commit()
+    return api_response(faq_topic_data(topic, include_inactive_questions=True), "FAQ topic disabled")
+
+
+@router.post("/faq-questions", status_code=status.HTTP_201_CREATED)
+def admin_create_faq_question(
+    payload: FaqQuestionCreate,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    if db.get(FaqTopic, payload.topic_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="FAQ topic not found")
+    question = FaqQuestion(**payload.model_dump())
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    return api_response(faq_question_data(question), "FAQ question created")
+
+
+@router.patch("/faq-questions/{question_id}")
+def admin_update_faq_question(
+    question_id: int,
+    payload: FaqQuestionUpdate,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    question = db.get(FaqQuestion, question_id)
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="FAQ question not found")
+    updates = payload.model_dump(exclude_unset=True)
+    if updates.get("topic_id") is not None and db.get(FaqTopic, updates["topic_id"]) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="FAQ topic not found")
+    for key, value in updates.items():
+        setattr(question, key, value)
+    db.commit()
+    db.refresh(question)
+    return api_response(faq_question_data(question), "FAQ question updated")
+
+
+@router.delete("/faq-questions/{question_id}")
+def admin_delete_faq_question(
+    question_id: int,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    question = db.get(FaqQuestion, question_id)
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="FAQ question not found")
+    question.is_active = False
+    db.commit()
+    db.refresh(question)
+    return api_response(faq_question_data(question), "FAQ question disabled")
 
 
 @router.get("/products")
@@ -754,3 +914,7 @@ def create_delivery_slot(
     db.commit()
     db.refresh(slot)
     return api_response(slot, "Delivery slot created")
+    FaqQuestionCreate,
+    FaqQuestionUpdate,
+    FaqTopicCreate,
+    FaqTopicUpdate,

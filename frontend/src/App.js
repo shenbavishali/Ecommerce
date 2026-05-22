@@ -16,7 +16,7 @@ import RecurringTemplatePanel from './components/RecurringTemplatePanel';
 import Chatbot from './components/Chatbot';
 import Home from './pages/Home';
 import useDebounce from './hooks/useDebounce';
-import { fetchCoupons, fetchFacets, fetchProducts, fetchSeasonalBanner, fetchSummerSaleOffers } from './services/api';
+import { fetchCoupons, fetchFacets, fetchHelpContent, fetchProducts, fetchSeasonalBanner, fetchSummerSaleOffers } from './services/api';
 import { useAuthStore } from './store/authStore';
 import { useCartStore } from './store/cartStore';
 import { useProfileStore } from './store/profileStore';
@@ -29,6 +29,7 @@ function App() {
   const [summerSaleOffers, setSummerSaleOffers] = useState([]);
   const [seasonalBanner, setSeasonalBanner] = useState(null);
   const [coupons, setCoupons] = useState([]);
+  const [branding, setBranding] = useState({ company_name: 'JioBasket', logo_url: '' });
   const [facets, setFacets] = useState({ categories: [], brands: [] });
   const [catalogStatus, setCatalogStatus] = useState({ loading: true, error: '' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,6 +48,21 @@ function App() {
   useEffect(() => {
     hydrateAuth();
   }, [hydrateAuth]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchHelpContent()
+      .then((content) => {
+        if (isMounted && content?.branding) {
+          setBranding(content.branding);
+          document.title = content.branding.company_name || 'JioBasket';
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (token) {
@@ -226,6 +242,10 @@ function App() {
       return (
         <AdminProductPanel
           initialTab="products"
+          onBrandingUpdated={(nextBranding) => {
+            setBranding(nextBranding);
+            document.title = nextBranding.company_name || 'JioBasket';
+          }}
           onCreated={(product) => {
             if (product?.id) {
               setProducts((currentProducts) => [product, ...currentProducts.filter((item) => item.id !== product.id)]);
@@ -277,6 +297,7 @@ function App() {
     <div className="min-h-screen bg-slate-50 text-slate-950">
       <Header
         activeView={activeView}
+        branding={branding}
         onNavigate={(view) => {
           if (view !== 'help') {
             setSelectedHelpOrder(null);
@@ -289,6 +310,7 @@ function App() {
       <main>{renderView()}</main>
       {user?.role !== 'admin' && (
         <Chatbot
+          branding={branding}
           catalogStatus={catalogStatus}
           coupons={coupons}
           onNavigate={(view) => {

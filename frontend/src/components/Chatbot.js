@@ -11,12 +11,12 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { addCartItem, fetchMonthlyGroceryTemplate, fetchProducts } from '../services/api';
+import { addCartItem, fetchHelpContent, fetchMonthlyGroceryTemplate, fetchProducts } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { useOrderStore } from '../store/orderStore';
 import { formatCurrency } from '../utils/formatCurrency';
-import { findHelpFaqAnswer } from '../utils/helpFaqs';
+import { findHelpFaqAnswerInTopics, helpFaqTopics } from '../utils/helpFaqs';
 import { productImageUrl } from '../utils/imageUrl';
 
 function currentMonthKey() {
@@ -199,8 +199,17 @@ function isHowToQuestion(text) {
   return hasAny(text, ['how do i', 'how can i', 'how to', 'where can i', 'where do i', 'what is the process', 'steps']);
 }
 
+function brandingLogoUrl(logoUrl) {
+  if (!logoUrl) {
+    return '';
+  }
+  return logoUrl.startsWith('/static')
+    ? `${process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000'}${logoUrl}`
+    : logoUrl;
+}
 
 export default function Chatbot({
+  branding,
   products = [],
   catalogStatus,
   coupons = [],
@@ -221,6 +230,7 @@ export default function Chatbot({
   const [isThinking, setIsThinking] = useState(false);
   const [templateStatus, setTemplateStatus] = useState({ loading: false, error: '' });
   const [expandedDetails, setExpandedDetails] = useState({});
+  const [helpContent, setHelpContent] = useState({ branding: branding || { company_name: 'JioBasket', logo_url: '' }, topics: helpFaqTopics });
   const scrollRef = useRef(null);
   const messageCountRef = useRef(messages.length);
 
@@ -268,6 +278,17 @@ export default function Chatbot({
       loadCart();
     }
   }, [isOpen, loadCart, loadOrders, user]);
+
+  useEffect(() => {
+    fetchHelpContent()
+      .then((content) => {
+        if (content) {
+          setHelpContent(content);
+        }
+      })
+      .catch(() => {});
+  }, []);
+  const displayBranding = branding || helpContent.branding || { company_name: 'JioBasket', logo_url: '' };
 
   const addBotResponse = (message) => {
     setMessages((currentMessages) => [...currentMessages, message]);
@@ -1002,7 +1023,7 @@ export default function Chatbot({
         (lowerText.includes('contact') && hasAny(lowerText, ['care', 'support', 'help']));
       const asksClearChat =
         hasAny(lowerText, ['clear chat', 'clear the chat', 'clear chat history', 'delete chat', 'reset chat']);
-      const matchedHelpFaq = findHelpFaqAnswer(lowerText);
+      const matchedHelpFaq = findHelpFaqAnswerInTopics(lowerText, helpContent.topics);
 
       if (asksClearChat) {
         clearChatHistory();
@@ -1018,7 +1039,7 @@ export default function Chatbot({
         showPhoneNumberHelp();
       } else if (asksEmailChange) {
         showEmailChangeHelp();
-      } else if (matchedHelpFaq && (howToQuestion || hasAny(lowerText, ['faq', 'help', 'support', 'payment', 'shipping', 'return', 'refund', 'gift card', 'wallet', 'loyalty', 'gst', 'cancel', 'account', 'login', 'signup', 'register']))) {
+      } else if (matchedHelpFaq) {
         addBotResponse(makeBotMessage(`${matchedHelpFaq.question}\n\n${matchedHelpFaq.answer}`));
       } else if (asksProfileChange) {
         addBotResponse(
@@ -1110,10 +1131,14 @@ export default function Chatbot({
           <div className="flex items-center justify-between bg-slate-950 px-4 py-3 text-white">
             <div className="flex items-center gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-md bg-emerald-500">
-                <Bot size={22} />
+                {displayBranding.logo_url ? (
+                  <img alt="" className="h-8 w-8 rounded object-cover" src={brandingLogoUrl(displayBranding.logo_url)} />
+                ) : (
+                  <Bot size={22} />
+                )}
               </span>
               <div>
-                <h2 className="text-sm font-black">JioBasket Assistant</h2>
+                <h2 className="text-sm font-black">{displayBranding.company_name || 'JioBasket'} Assistant</h2>
                 <p className="text-xs font-semibold text-emerald-100">Products, orders, support</p>
               </div>
             </div>

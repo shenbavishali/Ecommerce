@@ -209,6 +209,7 @@ const STOP_WORDS = new Set([
   'my',
   'of',
   'on',
+  'order',
   'the',
   'to',
   'what',
@@ -219,28 +220,49 @@ const STOP_WORDS = new Set([
 ]);
 
 export function findHelpFaqAnswer(query) {
+  return findHelpFaqAnswerInTopics(query, helpFaqTopics);
+}
+
+export function findHelpFaqAnswerInTopics(query, topics = helpFaqTopics) {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery) {
     return null;
   }
 
   const queryWords = normalizedQuery.split(' ').filter((word) => word.length > 2 && !STOP_WORDS.has(word));
+  if (queryWords.length === 0) {
+    return null;
+  }
+
   let bestMatch = null;
   let bestScore = 0;
 
-  helpFaqTopics.forEach((topic) => {
-    topic.questions.forEach((item) => {
-      const searchable = normalize(`${topic.title} ${item.question} ${item.answer}`);
-      const exactScore = searchable.includes(normalizedQuery) ? 5 : 0;
-      const wordScore = queryWords.reduce((score, word) => score + (searchable.includes(word) ? 1 : 0), 0);
-      const score = exactScore + wordScore;
+  topics.forEach((topic) => {
+    (topic.questions || []).forEach((item) => {
+      const normalizedTopic = normalize(topic.title);
+      const normalizedQuestion = normalize(item.question);
+      const normalizedAnswer = normalize(item.answer);
+      const searchable = `${normalizedTopic} ${normalizedQuestion} ${normalizedAnswer}`;
+      const exactQuestionScore =
+        normalizedQuestion.includes(normalizedQuery) || normalizedQuery.includes(normalizedQuestion) ? 12 : 0;
+      const exactSearchableScore = searchable.includes(normalizedQuery) ? 6 : 0;
+      const questionWordScore = queryWords.reduce(
+        (score, word) => score + (normalizedQuestion.includes(word) ? 3 : 0),
+        0
+      );
+      const searchableWordScore = queryWords.reduce(
+        (score, word) => score + (searchable.includes(word) ? 1 : 0),
+        0
+      );
+      const allWordsMatched = queryWords.every((word) => searchable.includes(word));
+      const score = exactQuestionScore + exactSearchableScore + questionWordScore + searchableWordScore;
 
-      if (score > bestScore) {
+      if (allWordsMatched && score > bestScore) {
         bestScore = score;
         bestMatch = { topic, ...item };
       }
     });
   });
 
-  return bestScore > 0 ? bestMatch : null;
+  return bestScore >= 5 ? bestMatch : null;
 }

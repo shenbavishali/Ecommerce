@@ -6,18 +6,23 @@ import {
   createAdminDeliveryBoy,
   createAdminDeliveryHub,
   createAdminCoupon,
+  createAdminFaqQuestion,
+  createAdminFaqTopic,
   createAdminProduct,
   createAdminSeasonalBanner,
   createAdminSummerSaleOffer,
   deleteAdminDeliveryBoy,
   deleteAdminDeliveryHub,
   deleteAdminCoupon,
+  deleteAdminFaqQuestion,
+  deleteAdminFaqTopic,
   deleteAdminProduct,
   fetchAdminCoupons,
   fetchAdminDashboard,
   fetchAdminDeliveryBoys,
   fetchAdminDeliveryHubs,
   fetchAdminHelpRequests,
+  fetchAdminHelpContent,
   fetchAdminOrders,
   fetchAdminProductHubStock,
   fetchAdminProducts,
@@ -28,6 +33,10 @@ import {
   updateAdminOrderCancellation,
   updateAdminReturn,
   updateAdminCoupon,
+  updateAdminFaqQuestion,
+  updateAdminFaqTopic,
+  updateAdminHelpBranding,
+  uploadAdminHelpLogo,
   updateAdminDeliveryBoy,
   updateAdminDeliveryHub,
   updateAdminOrderStatus,
@@ -114,6 +123,7 @@ const tabs = [
   ['hub-stock', 'Hub Stock'],
   ['delivery-boys', 'Courier Providers'],
   ['help-requests', 'Help'],
+  ['chatbot-content', 'Chatbot Content'],
   ['revenue', 'Revenue'],
   ['returns', 'Returns'],
   ['cancelled-products', 'Cancelled Products'],
@@ -163,6 +173,20 @@ const initialCouponForm = {
   discount: '',
   min_order: '',
   expires_at: '',
+  is_active: true,
+};
+
+const initialFaqTopicForm = {
+  title: '',
+  sort_order: 0,
+  is_active: true,
+};
+
+const initialFaqQuestionForm = {
+  topic_id: '',
+  question: '',
+  answer: '',
+  sort_order: 0,
   is_active: true,
 };
 
@@ -227,7 +251,7 @@ function resolveImageUrl(imageUrl) {
     : imageUrl;
 }
 
-export default function AdminProductPanel({ compact = false, initialTab = 'products', onCreated }) {
+export default function AdminProductPanel({ compact = false, initialTab = 'products', onBrandingUpdated, onCreated }) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [dashboard, setDashboard] = useState(null);
   const [products, setProducts] = useState([]);
@@ -241,12 +265,17 @@ export default function AdminProductPanel({ compact = false, initialTab = 'produ
   const [summerSaleOffers, setSummerSaleOffers] = useState([]);
   const [seasonalBanners, setSeasonalBanners] = useState([]);
   const [coupons, setCoupons] = useState([]);
+  const [helpContent, setHelpContent] = useState({ branding: { company_name: 'JioBasket', logo_url: '' }, topics: [] });
   const [product, setProduct] = useState(initialProduct);
   const [deliveryBoyForm, setDeliveryBoyForm] = useState(initialDeliveryBoy);
   const [deliveryHubForm, setDeliveryHubForm] = useState(initialDeliveryHub);
   const [summerSaleForm, setSummerSaleForm] = useState(initialSummerSaleForm);
   const [seasonalBannerForm, setSeasonalBannerForm] = useState(initialSeasonalBannerForm);
   const [couponForm, setCouponForm] = useState(initialCouponForm);
+  const [brandingForm, setBrandingForm] = useState({ company_name: 'JioBasket', logo_url: '' });
+  const [brandingLogoFile, setBrandingLogoFile] = useState(null);
+  const [faqTopicForm, setFaqTopicForm] = useState(initialFaqTopicForm);
+  const [faqQuestionForm, setFaqQuestionForm] = useState(initialFaqQuestionForm);
   const [productImageFile, setProductImageFile] = useState(null);
   const [seasonalBannerFile, setSeasonalBannerFile] = useState(null);
   const [editingDeliveryBoyId, setEditingDeliveryBoyId] = useState(null);
@@ -254,6 +283,8 @@ export default function AdminProductPanel({ compact = false, initialTab = 'produ
   const [editingSummerSaleId, setEditingSummerSaleId] = useState(null);
   const [editingSeasonalBannerId, setEditingSeasonalBannerId] = useState(null);
   const [editingCouponId, setEditingCouponId] = useState(null);
+  const [editingFaqTopicId, setEditingFaqTopicId] = useState(null);
+  const [editingFaqQuestionId, setEditingFaqQuestionId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [restock, setRestock] = useState({});
   const [productScope, setProductScope] = useState('all');
@@ -303,6 +334,7 @@ export default function AdminProductPanel({ compact = false, initialTab = 'produ
         summerSaleResponse,
         seasonalBannerResponse,
         couponResponse,
+        helpContentResponse,
       ] = await Promise.all([
         fetchAdminDashboard(),
         fetchAdminProducts({ page_size: 100 }),
@@ -316,6 +348,7 @@ export default function AdminProductPanel({ compact = false, initialTab = 'produ
         fetchAdminSummerSaleOffers(),
         fetchAdminSeasonalBanners(),
         fetchAdminCoupons(),
+        fetchAdminHelpContent(),
       ]);
       setDashboard(summary);
       setProducts(productResponse.items || []);
@@ -329,6 +362,8 @@ export default function AdminProductPanel({ compact = false, initialTab = 'produ
       setSummerSaleOffers(summerSaleResponse || []);
       setSeasonalBanners(seasonalBannerResponse || []);
       setCoupons(couponResponse || []);
+      setHelpContent(helpContentResponse || { branding: { company_name: 'JioBasket', logo_url: '' }, topics: [] });
+      setBrandingForm(helpContentResponse?.branding || { company_name: 'JioBasket', logo_url: '' });
     } catch (error) {
       setStatus({
         loading: false,
@@ -392,6 +427,16 @@ export default function AdminProductPanel({ compact = false, initialTab = 'produ
   const resetCouponForm = () => {
     setCouponForm(initialCouponForm);
     setEditingCouponId(null);
+  };
+
+  const resetFaqTopicForm = () => {
+    setFaqTopicForm(initialFaqTopicForm);
+    setEditingFaqTopicId(null);
+  };
+
+  const resetFaqQuestionForm = () => {
+    setFaqQuestionForm(initialFaqQuestionForm);
+    setEditingFaqQuestionId(null);
   };
 
   const submit = async (event) => {
@@ -754,6 +799,135 @@ export default function AdminProductPanel({ compact = false, initialTab = 'produ
         loading: false,
         message: '',
         error: error.response?.data?.message || error.response?.data?.detail || 'Coupon delete failed',
+      });
+    }
+  };
+
+  const submitBranding = async (event) => {
+    event.preventDefault();
+    setStatus({ loading: true, message: '', error: '' });
+    try {
+      let branding = await updateAdminHelpBranding(brandingForm);
+      if (brandingLogoFile) {
+        branding = await uploadAdminHelpLogo(brandingLogoFile);
+      }
+      setHelpContent((current) => ({ ...current, branding }));
+      setBrandingForm(branding);
+      setBrandingLogoFile(null);
+      onBrandingUpdated?.(branding);
+      setStatus({ loading: false, message: brandingLogoFile ? 'Chatbot branding and logo updated.' : 'Chatbot branding updated.', error: '' });
+    } catch (error) {
+      setStatus({
+        loading: false,
+        message: '',
+        error: error.response?.data?.message || error.response?.data?.detail || 'Branding update failed',
+      });
+    }
+  };
+
+  const reloadHelpContent = async () => {
+    const content = await fetchAdminHelpContent();
+    setHelpContent(content || { branding: { company_name: 'JioBasket', logo_url: '' }, topics: [] });
+    setBrandingForm(content?.branding || { company_name: 'JioBasket', logo_url: '' });
+  };
+
+  const submitFaqTopic = async (event) => {
+    event.preventDefault();
+    setStatus({ loading: true, message: '', error: '' });
+    try {
+      const payload = {
+        ...faqTopicForm,
+        sort_order: Number(faqTopicForm.sort_order || 0),
+      };
+      if (editingFaqTopicId) {
+        await updateAdminFaqTopic(editingFaqTopicId, payload);
+      } else {
+        await createAdminFaqTopic(payload);
+      }
+      resetFaqTopicForm();
+      await reloadHelpContent();
+      setStatus({ loading: false, message: 'FAQ topic saved.', error: '' });
+    } catch (error) {
+      setStatus({
+        loading: false,
+        message: '',
+        error: error.response?.data?.message || error.response?.data?.detail || 'FAQ topic save failed',
+      });
+    }
+  };
+
+  const startFaqTopicEdit = (topic) => {
+    setFaqTopicForm({
+      title: topic.title || '',
+      sort_order: topic.sort_order || 0,
+      is_active: Boolean(topic.is_active),
+    });
+    setEditingFaqTopicId(topic.id);
+  };
+
+  const removeFaqTopic = async (topicId) => {
+    setStatus({ loading: true, message: '', error: '' });
+    try {
+      await deleteAdminFaqTopic(topicId);
+      await reloadHelpContent();
+      setStatus({ loading: false, message: 'FAQ topic disabled.', error: '' });
+    } catch (error) {
+      setStatus({
+        loading: false,
+        message: '',
+        error: error.response?.data?.message || error.response?.data?.detail || 'FAQ topic delete failed',
+      });
+    }
+  };
+
+  const submitFaqQuestion = async (event) => {
+    event.preventDefault();
+    setStatus({ loading: true, message: '', error: '' });
+    try {
+      const payload = {
+        ...faqQuestionForm,
+        topic_id: Number(faqQuestionForm.topic_id),
+        sort_order: Number(faqQuestionForm.sort_order || 0),
+      };
+      if (editingFaqQuestionId) {
+        await updateAdminFaqQuestion(editingFaqQuestionId, payload);
+      } else {
+        await createAdminFaqQuestion(payload);
+      }
+      resetFaqQuestionForm();
+      await reloadHelpContent();
+      setStatus({ loading: false, message: 'FAQ question saved.', error: '' });
+    } catch (error) {
+      setStatus({
+        loading: false,
+        message: '',
+        error: error.response?.data?.message || error.response?.data?.detail || 'FAQ question save failed',
+      });
+    }
+  };
+
+  const startFaqQuestionEdit = (question) => {
+    setFaqQuestionForm({
+      topic_id: String(question.topic_id || ''),
+      question: question.question || '',
+      answer: question.answer || '',
+      sort_order: question.sort_order || 0,
+      is_active: Boolean(question.is_active),
+    });
+    setEditingFaqQuestionId(question.id);
+  };
+
+  const removeFaqQuestion = async (questionId) => {
+    setStatus({ loading: true, message: '', error: '' });
+    try {
+      await deleteAdminFaqQuestion(questionId);
+      await reloadHelpContent();
+      setStatus({ loading: false, message: 'FAQ question disabled.', error: '' });
+    } catch (error) {
+      setStatus({
+        loading: false,
+        message: '',
+        error: error.response?.data?.message || error.response?.data?.detail || 'FAQ question delete failed',
       });
     }
   };
@@ -2088,6 +2262,198 @@ export default function AdminProductPanel({ compact = false, initialTab = 'produ
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {activeTab === 'chatbot-content' && (
+        <div className="mt-6 space-y-6">
+          <form className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm" onSubmit={submitBranding}>
+            <h2 className="text-lg font-black text-slate-950">Branding settings</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">Company name and logo used across the app, Help & Care, and chatbot.</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label>
+                <span className="mb-2 block text-sm font-bold text-slate-700">Company name</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-emerald-500"
+                  onChange={(event) => setBrandingForm({ ...brandingForm, company_name: event.target.value })}
+                  required
+                  value={brandingForm.company_name || ''}
+                />
+              </label>
+              <label>
+                <span className="mb-2 block text-sm font-bold text-slate-700">Logo URL</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-emerald-500"
+                  onChange={(event) => setBrandingForm({ ...brandingForm, logo_url: event.target.value })}
+                  placeholder="https://..."
+                  value={brandingForm.logo_url || ''}
+                />
+              </label>
+            </div>
+            <label className="mt-4 block">
+              <span className="mb-2 block text-sm font-bold text-slate-700">Upload logo</span>
+              <input
+                accept="image/png,image/jpeg,image/webp"
+                className="w-full rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-sm font-semibold"
+                onChange={(event) => setBrandingLogoFile(event.target.files?.[0] || null)}
+                type="file"
+              />
+            </label>
+            <button className="mt-4 h-10 rounded-md bg-emerald-600 px-4 text-sm font-black text-white hover:bg-emerald-700" type="submit">
+              Save Branding
+            </button>
+          </form>
+
+          <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+            <form className="h-fit rounded-lg border border-slate-200 bg-white p-5 shadow-sm" onSubmit={submitFaqTopic}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-black text-slate-950">{editingFaqTopicId ? 'Edit FAQ topic' : 'Add FAQ topic'}</h2>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">Create categories shown in Help & Care.</p>
+                </div>
+                {editingFaqTopicId && (
+                  <button className="text-sm font-bold text-slate-500" onClick={resetFaqTopicForm} type="button">Cancel</button>
+                )}
+              </div>
+              <label className="mt-4 block">
+                <span className="mb-2 block text-sm font-bold text-slate-700">Topic title</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-emerald-500"
+                  onChange={(event) => setFaqTopicForm({ ...faqTopicForm, title: event.target.value })}
+                  required
+                  value={faqTopicForm.title}
+                />
+              </label>
+              <label className="mt-4 block">
+                <span className="mb-2 block text-sm font-bold text-slate-700">Sort order</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-emerald-500"
+                  min="0"
+                  onChange={(event) => setFaqTopicForm({ ...faqTopicForm, sort_order: event.target.value })}
+                  type="number"
+                  value={faqTopicForm.sort_order}
+                />
+              </label>
+              <label className="mt-4 flex items-center gap-2 text-sm font-bold text-slate-700">
+                <input checked={faqTopicForm.is_active} onChange={(event) => setFaqTopicForm({ ...faqTopicForm, is_active: event.target.checked })} type="checkbox" />
+                Active topic
+              </label>
+              <button className="mt-5 h-11 w-full rounded-md bg-emerald-600 text-sm font-black text-white hover:bg-emerald-700" type="submit">
+                {editingFaqTopicId ? 'Save Topic' : 'Add Topic'}
+              </button>
+            </form>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-black text-slate-950">FAQ topics</h2>
+              <div className="mt-4 grid gap-3">
+                {helpContent.topics.map((topic) => (
+                  <div className="rounded-md border border-slate-200 p-3" key={topic.id}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-black text-slate-950">{topic.title}</div>
+                        <div className="mt-1 text-xs font-bold text-slate-500">Order {topic.sort_order} | {topic.is_active ? 'Active' : 'Disabled'} | {topic.questions?.length || 0} questions</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className="h-9 rounded-md border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50" onClick={() => startFaqTopicEdit(topic)} type="button">Edit</button>
+                        <button className="h-9 rounded-md border border-rose-200 px-3 text-xs font-black text-rose-700 hover:bg-rose-50" onClick={() => removeFaqTopic(topic.id)} type="button">Delete</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
+            <form className="h-fit rounded-lg border border-slate-200 bg-white p-5 shadow-sm" onSubmit={submitFaqQuestion}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-black text-slate-950">{editingFaqQuestionId ? 'Edit question' : 'Add question'}</h2>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">Answers are used by the chatbot and Help & Care page.</p>
+                </div>
+                {editingFaqQuestionId && (
+                  <button className="text-sm font-bold text-slate-500" onClick={resetFaqQuestionForm} type="button">Cancel</button>
+                )}
+              </div>
+              <label className="mt-4 block">
+                <span className="mb-2 block text-sm font-bold text-slate-700">Topic</span>
+                <select
+                  className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-emerald-500"
+                  onChange={(event) => setFaqQuestionForm({ ...faqQuestionForm, topic_id: event.target.value })}
+                  required
+                  value={faqQuestionForm.topic_id}
+                >
+                  <option value="">Select topic</option>
+                  {helpContent.topics.map((topic) => (
+                    <option key={topic.id} value={topic.id}>{topic.title}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="mt-4 block">
+                <span className="mb-2 block text-sm font-bold text-slate-700">Question</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-emerald-500"
+                  onChange={(event) => setFaqQuestionForm({ ...faqQuestionForm, question: event.target.value })}
+                  required
+                  value={faqQuestionForm.question}
+                />
+              </label>
+              <label className="mt-4 block">
+                <span className="mb-2 block text-sm font-bold text-slate-700">Answer</span>
+                <textarea
+                  className="min-h-28 w-full rounded-md border border-slate-200 p-3 text-sm font-semibold outline-none focus:border-emerald-500"
+                  onChange={(event) => setFaqQuestionForm({ ...faqQuestionForm, answer: event.target.value })}
+                  required
+                  value={faqQuestionForm.answer}
+                />
+              </label>
+              <label className="mt-4 block">
+                <span className="mb-2 block text-sm font-bold text-slate-700">Sort order</span>
+                <input
+                  className="h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-emerald-500"
+                  min="0"
+                  onChange={(event) => setFaqQuestionForm({ ...faqQuestionForm, sort_order: event.target.value })}
+                  type="number"
+                  value={faqQuestionForm.sort_order}
+                />
+              </label>
+              <label className="mt-4 flex items-center gap-2 text-sm font-bold text-slate-700">
+                <input checked={faqQuestionForm.is_active} onChange={(event) => setFaqQuestionForm({ ...faqQuestionForm, is_active: event.target.checked })} type="checkbox" />
+                Active question
+              </label>
+              <button className="mt-5 h-11 w-full rounded-md bg-emerald-600 text-sm font-black text-white hover:bg-emerald-700" type="submit">
+                {editingFaqQuestionId ? 'Save Question' : 'Add Question'}
+              </button>
+            </form>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-black text-slate-950">Questions & answers</h2>
+              <div className="mt-4 space-y-4">
+                {helpContent.topics.map((topic) => (
+                  <div key={topic.id}>
+                    <h3 className="text-sm font-black uppercase text-slate-500">{topic.title}</h3>
+                    <div className="mt-2 space-y-2">
+                      {(topic.questions || []).map((question) => (
+                        <div className="rounded-md border border-slate-200 p-3" key={question.id}>
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="max-w-2xl">
+                              <div className="font-black text-slate-950">{question.question}</div>
+                              <p className="mt-1 text-sm font-semibold text-slate-600">{question.answer}</p>
+                              <div className="mt-2 text-xs font-bold text-slate-500">Order {question.sort_order} | {question.is_active ? 'Active' : 'Disabled'}</div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button className="h-9 rounded-md border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50" onClick={() => startFaqQuestionEdit(question)} type="button">Edit</button>
+                              <button className="h-9 rounded-md border border-rose-200 px-3 text-xs font-black text-rose-700 hover:bg-rose-50" onClick={() => removeFaqQuestion(question.id)} type="button">Delete</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
